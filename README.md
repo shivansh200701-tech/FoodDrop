@@ -1,144 +1,115 @@
-# FoodDrop (Full Stack MVP)
+# FoodDrop
 
-FoodDrop is a full-stack mobile MVP for sharing extra food from homes and restaurants with nearby receivers in real-time.
+Never let food go to waste. **FoodDrop** connects people who have extra food — homes, hotels, and restaurants — with nearby people in real time. Users can discover food spots on a map, check freshness, and pick up before it expires.
 
-## What is implemented
-
-### Mobile app (Expo + React Native)
-- Receiver map view with nearby listings and color-coded markers.
-- Nearby feed sorted by distance and freshness signal.
-- Giver listing creation flow (name, quantity, type, photo, pickup window).
-- Cloudinary image upload from device gallery.
-- My listings management (mark out-of-stock and delete).
-- Freshness badge rendering (`green`, `yellow`, `red`).
-
-### Backend (Firebase)
-- Firestore data model and geohash-backed location storage.
-- Firestore rules so only owner can modify their own listings.
-- Storage rules with auth + image size limits.
-- Scheduled Cloud Function to expire stale listings every 30 minutes.
-- Triggered Cloud Function to notify nearby users of new listings.
-
-## Architecture
+## Architecture Diagram
 
 ```mermaid
 flowchart LR
-    A[Expo React Native App] --> B[Firebase Auth]
-    A --> C[Cloudinary Upload API]
-    C --> D[Cloudinary CDN URL]
-    D --> E[Firestore: listings]
+    A[React Native App (Expo)] --> B[Firebase Auth]
+    A --> C[Firestore]
+    A --> D[Firebase Storage]
+    A --> E[Google Maps SDK]
+    A --> F[GeoFirestore Queries]
+    A --> G[FCM Push Notifications]
 
-    A --> E
-    A --> F[Geo Queries via geofire-common]
-    A --> G[Google Maps SDK / react-native-maps]
+    A --> H[Cloudinary Upload API]
+    H --> I[Cloudinary CDN URL]
+    I --> C
 
-    E --> H[Cloud Functions]
-    H --> E
-    H --> I[FCM Push Notifications]
+    C --> J[Cloud Functions]
+    J --> C
+    J --> G
+
+    subgraph Client Features
+      K[Giver: Post/Edit/Delete Listing]
+      L[Receiver: Map + Nearby Feed]
+      M[Freshness Badge + Filters]
+    end
+
+    A --> K
+    A --> L
+    A --> M
 ```
 
-## Listing schema (`listings/{listingId}`)
+## Tech Stack
 
-```ts
-{
-  listingId: string,
-  userId: string,
-  userType: "home" | "hotel",
-  foodName: string,
-  foodType: "veg" | "non-veg" | "cooked" | "raw",
-  prepTime: Timestamp,
-  quantity: string,
-  imageUrl: string,
-  status: "available" | "empty" | "expired",
-  location: {
-    lat: number,
-    lng: number,
-    geohash: string
-  },
-  pickupWindow: {
-    startAt: string,
-    endAt: string
-  },
-  expiresAt: Timestamp,
-  createdAt: Timestamp
-}
-```
+- **Mobile:** React Native (Expo) for Android
+- **Backend:** Firebase Auth, Firestore, Storage, Cloud Functions
+- **Geo Queries:** GeoFirestore (radius + distance sorting)
+- **Media:** Cloudinary (image compression + CDN)
+- **Notifications:** Firebase Cloud Messaging (FCM)
+- **Maps:** Google Maps SDK
 
-## Nearby algorithm
+## Firestore Listing Schema
 
-- Build geohash ranges via `geohashQueryBounds(center, radiusMeters)`.
-- Query Firestore by geohash intervals and `status == "available"`.
-- Filter by true distance using `distanceBetween`.
-- Sort results by `distance ASC`, then `prepTime DESC`.
+Each listing document includes:
 
-Default radius is 5 km (expandable in code).
+- `listingId`
+- `userId`
+- `userType` (`home` | `hotel`)
+- `foodName`
+- `foodType` (`veg` | `non-veg` | `cooked` | `raw`)
+- `prepTime` (timestamp)
+- `quantity`
+- `imageUrl` (Cloudinary URL)
+- `status` (`available` | `empty` | `expired`)
+- `location` object:
+  - `lat`
+  - `lng`
+  - `geohash`
+- `expiresAt` (auto-set by Cloud Function)
+- `pickupWindow` (`startAt`, `endAt`)
 
-## Auto-expiry
+## Giver Features
 
-- Function: `expireOldListings`
-- Trigger: every 30 minutes
-- Logic: listings with `status == "available"` and `expiresAt <= now` become `expired`.
+- Post food with name, photo, quantity, type, and prep time
+- Mark listing as **Out of Stock** (real-time status update)
+- Choose provider type: **home** or **hotel/restaurant**
+- Set pickup time window
+- Edit or delete listing at any time
 
-## Security
+## Receiver Features
 
-- Posting requires authenticated Firebase user.
-- Firestore Rules:
-  - anyone can read listings
-  - only owner can update/delete listing
-- Storage Rules:
-  - only authenticated owner can upload under their folder
-  - max 5 MB
-  - images only
+- Map view with color-coded pins:
+  - 🟢 Green = available
+  - 🔴 Red = empty
+- Feed sorted by distance (GeoFirestore radius query)
+- Filter by food type and veg/non-veg preference
+- Push notification for nearby newly posted food
+- Freshness indicator (example: *“cooked 2 hrs ago”*)
 
-## Project structure
+## Nearby Discovery Algorithm
 
-```
-.
-├── App.tsx
-├── src
-│   ├── components
-│   ├── config
-│   ├── hooks
-│   ├── screens
-│   ├── services
-│   ├── types
-│   └── utils
-├── functions
-│   └── src/index.ts
-├── firestore.rules
-├── firestore.indexes.json
-├── storage.rules
-└── firebase.json
-```
+1. Store location as geohash + lat/lng in Firestore via GeoFirestore.
+2. Query with `within(center, radius, field)`.
+3. Use default radius of **5 km** (user can expand).
+4. Sort by:
+   - `distance ASC`
+   - then `prepTime DESC`
 
-## Local setup
+## Auto-Expiry System
 
-### 1) Install dependencies
-```bash
-npm install
-cd functions && npm install && cd ..
-```
+- Scheduled Cloud Function runs every **30 minutes**
+- Marks stale listings as `expired` once age exceeds configured threshold
+- Expired listings are hidden from map and feed automatically
 
-### 2) Configure env
-Copy `.env.example` to `.env` and fill Firebase + Cloudinary values.
+## Security Model
 
-### 3) Run app
-```bash
-npm run start
-```
+- Firebase Auth required to **post** (view can remain public)
+- Firestore Rules: only the owner can edit/delete their listings
+- Image upload size limits enforced in-app and in Storage Rules
 
-### 4) Run Firebase emulators (optional)
-```bash
-firebase emulators:start
-```
+## UX Details
 
-### 5) Build functions
-```bash
-cd functions
-npm run build
-```
-
-## Notes
-
-- This repo is an MVP foundation: auth screens, robust validation, offline support, and production error handling should be added before production launch.
-- For FCM in Expo production builds, move from Expo token flow to native FCM/APNs registration as needed by your deployment strategy.
+- Hotel/restaurant accounts show a **Restaurant** badge on map pin/card
+- Freshness color scale:
+  - Green = fresh
+  - Yellow = a few hours old
+  - Red = near expiry
+- Listing card shows:
+  - Photo
+  - Distance
+  - Food name
+  - Time posted
+  - Giver type
