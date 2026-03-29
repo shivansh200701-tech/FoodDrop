@@ -1,0 +1,21 @@
+{
+  "name": "fooddrop-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1",
+    "geofire-common": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
