@@ -1,4 +1,4 @@
-# FoodDrop
+# FoodDrop1
 
 Never let food go to waste. **FoodDrop** connects people who have extra food — homes, hotels, and restaurants — with nearby people in real time. Users can discover food spots on a map, check freshness, and pick up before it expires.
 
